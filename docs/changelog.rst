@@ -15,6 +15,14 @@ Changelog
 * Build binary wheels against `OpenSSL`_ 3.5.4.
 * Add command-line argument to the `http3_client` example to request
   a key update during interoperability tests.
+* Add ``extra_ca_certs`` parameter to ``QuicConfiguration``,
+  ``Context``, and ``verify_certificate()`` to supply trusted CA
+  certificates as ``cryptography.x509.Certificate`` objects without
+  requiring temporary files.  When ``extra_ca_certs`` is the only trust
+  anchor source configured, the certifi bundle is not loaded; the
+  supplied certificates are the sole trust anchors.  Use
+  ``load_verify_locations(extra_ca_certs=[...])`` to set them via the
+  public API.
 
 1.2.0
 -----

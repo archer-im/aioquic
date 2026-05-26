@@ -3,6 +3,8 @@ from os import PathLike
 from re import split
 from typing import Any, Optional, TextIO, Union
 
+from cryptography import x509
+
 from ..tls import (
     CipherSuite,
     SessionTicket,
@@ -36,6 +38,24 @@ class QuicConfiguration:
     connection_id_length: int = 8
     """
     The length in bytes of local connection IDs.
+    """
+
+    extra_ca_certs: list[x509.Certificate] = field(default_factory=list)
+    """
+    Additional trusted CA certificates supplied as
+    :class:`cryptography.x509.Certificate` objects.
+
+    These are loaded into the trust store alongside any certificates provided
+    via :meth:`load_verify_locations`. When this list is non-empty and no
+    other trust anchor source (``cafile``, ``capath``, or ``cadata``) is
+    configured, the certifi bundle is **not** loaded; the supplied certificates
+    are the sole trust anchors.
+
+    The primary use case is injecting CA certificates obtained from platform
+    certificate stores (e.g. the Windows certificate store via
+    :func:`ssl.enum_certificates`) without requiring temporary files.
+
+    .. note:: This is only used by clients.
     """
 
     idle_timeout: float = 60.0
@@ -153,6 +173,7 @@ class QuicConfiguration:
         cafile: Optional[str] = None,
         capath: Optional[str] = None,
         cadata: Optional[bytes] = None,
+        extra_ca_certs: Optional[list[x509.Certificate]] = None,
     ) -> None:
         """
         Load a set of "certification authority" (CA) certificates used to
@@ -161,3 +182,5 @@ class QuicConfiguration:
         self.cafile = cafile
         self.capath = capath
         self.cadata = cadata
+        if extra_ca_certs is not None:
+            self.extra_ca_certs = list(extra_ca_certs)

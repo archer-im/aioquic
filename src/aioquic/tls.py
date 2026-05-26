@@ -221,7 +221,10 @@ def verify_certificate(
     cadata: Optional[bytes] = None,
     cafile: Optional[str] = None,
     capath: Optional[str] = None,
+    extra_ca_certs: Optional[list[x509.Certificate]] = None,
 ) -> None:
+    if extra_ca_certs is None:
+        extra_ca_certs = []
     # verify dates
     now = utcnow()
     if now < certificate.not_valid_before_utc:
@@ -268,7 +271,7 @@ def verify_certificate(
     # load CAs
     store = crypto.X509Store()
 
-    if cadata is None and cafile is None and capath is None:
+    if cadata is None and cafile is None and capath is None and not extra_ca_certs:
         # Load defaults from certifi.
         store.load_locations(certifi.where())
 
@@ -278,6 +281,9 @@ def verify_certificate(
 
     if cafile is not None or capath is not None:
         store.load_locations(cafile, capath)
+
+    for cert in extra_ca_certs:
+        store.add_cert(crypto.X509.from_cryptography(cert))
 
     # verify certificate chain
     store_ctx = crypto.X509StoreContext(
@@ -1250,16 +1256,20 @@ class Context:
         cafile: Optional[str] = None,
         capath: Optional[str] = None,
         cipher_suites: Optional[list[CipherSuite]] = None,
+        extra_ca_certs: Optional[list[x509.Certificate]] = None,
         logger: Optional[Union[logging.Logger, logging.LoggerAdapter]] = None,
         max_early_data: Optional[int] = None,
         server_name: Optional[str] = None,
         verify_mode: Optional[int] = None,
     ):
+        if extra_ca_certs is None:
+            extra_ca_certs = []
         # configuration
         self._alpn_protocols = alpn_protocols
         self._cadata = cadata
         self._cafile = cafile
         self._capath = capath
+        self._extra_ca_certs = extra_ca_certs
         self.certificate: Optional[x509.Certificate] = None
         self.certificate_chain: list[x509.Certificate] = []
         self.certificate_private_key: Optional[
@@ -1727,6 +1737,7 @@ class Context:
                 cadata=self._cadata,
                 cafile=self._cafile,
                 capath=self._capath,
+                extra_ca_certs=self._extra_ca_certs,
                 certificate=self._peer_certificate,
                 chain=self._peer_certificate_chain,
                 server_name=self._server_name,

@@ -50,6 +50,7 @@ from .utils import (
     SERVER_CERTFILE,
     SERVER_KEYFILE,
     SKIP_TESTS,
+    generate_ca_and_leaf_certificate,
     generate_ec_certificate,
     generate_ed448_certificate,
     generate_ed25519_certificate,
@@ -655,6 +656,22 @@ class ContextTest(TestCase):
         client = self.create_client(cafile=None, verify_mode=ssl.CERT_NONE)
         server = self.create_server()
 
+        self._handshake(client, server)
+
+    def test_handshake_with_extra_ca_certs(self):
+        with open(SERVER_CACERTFILE, "rb") as fp:
+            ca_cert = load_pem_x509_certificates(fp.read())[0]
+
+        # without extra_ca_certs the test CA is not trusted (certifi is used,
+        # which does not contain the test CA)
+        client = self.create_client(cafile=None)
+        server = self.create_server()
+        with self.assertRaises(tls.AlertBadCertificate):
+            self._handshake(client, server)
+
+        # with the test CA supplied via extra_ca_certs the handshake succeeds
+        client = self.create_client(cafile=None, extra_ca_certs=[ca_cert])
+        server = self.create_server()
         self._handshake(client, server)
 
     def test_handshake_with_grease_group(self):
@@ -1659,6 +1676,25 @@ class VerifyCertificateTest(TestCase):
             verify_certificate(
                 cadata=certificate.public_bytes(serialization.Encoding.PEM),
                 certificate=certificate,
+                server_name="localhost",
+            )
+
+    def test_verify_certificate_extra_ca_certs(self):
+        ca_cert, leaf_cert, _ = generate_ca_and_leaf_certificate(
+            alternative_names=["localhost"], common_name="localhost"
+        )
+
+        with patch("aioquic.tls.utcnow") as mock_utcnow:
+            mock_utcnow.return_value = leaf_cert.not_valid_before_utc
+
+            # fail without extra_ca_certs: the CA is unknown, certifi is used
+            with self.assertRaises(tls.AlertBadCertificate):
+                verify_certificate(certificate=leaf_cert, server_name="localhost")
+
+            # ok with the CA cert in extra_ca_certs; certifi is not loaded
+            verify_certificate(
+                extra_ca_certs=[ca_cert],
+                certificate=leaf_cert,
                 server_name="localhost",
             )
 

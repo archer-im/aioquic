@@ -120,6 +120,58 @@ def generate_rsa_certificate(
     )
 
 
+def generate_ca_and_leaf_certificate(
+    common_name: str, alternative_names: list[str] = []
+) -> tuple[x509.Certificate, x509.Certificate, ec.EllipticCurvePrivateKey]:
+    """
+    Generate a self-signed CA certificate and a leaf certificate signed by it.
+
+    Returns (ca_cert, leaf_cert, leaf_key).
+    """
+    ca_key = ec.generate_private_key(curve=ec.SECP256R1())
+    ca_name = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "Test CA")])
+    ca_cert = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now(datetime.timezone.utc))
+        .not_valid_after(
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=10)
+        )
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None), critical=True
+        )
+        .sign(ca_key, hashes.SHA256())
+    )
+
+    leaf_key = ec.generate_private_key(curve=ec.SECP256R1())
+    leaf_name = x509.Name(
+        [x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name)]
+    )
+    leaf_builder = (
+        x509.CertificateBuilder()
+        .subject_name(leaf_name)
+        .issuer_name(ca_name)
+        .public_key(leaf_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now(datetime.timezone.utc))
+        .not_valid_after(
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=10)
+        )
+    )
+    if alternative_names:
+        leaf_builder = leaf_builder.add_extension(
+            x509.SubjectAlternativeName(
+                [dns_name_or_ip_address(name) for name in alternative_names]
+            ),
+            critical=False,
+        )
+    leaf_cert = leaf_builder.sign(ca_key, hashes.SHA256())
+    return ca_cert, leaf_cert, leaf_key
+
+
 def load(name: str) -> bytes:
     path = os.path.join(os.path.dirname(__file__), name)
     with open(path, "rb") as fp:
